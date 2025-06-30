@@ -15,7 +15,7 @@ bot.command('start', (ctx) => ctx.reply('Привет! Я бот на базе O
 bot.on('text', async (ctx) => {
     lastRequestTime = new Date().toISOString();
     const userMessage = ctx.message.text;
-    console.log('User message:', userMessage);
+    console.log(`[${lastRequestTime}] Received message:`, userMessage);
 
     try {
         const response = await openai.chat.completions.create({
@@ -27,13 +27,17 @@ bot.on('text', async (ctx) => {
         });
 
         const botReply = response.choices[0].message.content.trim();
-        console.log('OpenAI reply:', botReply);
+        console.log(`[${new Date().toISOString()}] OpenAI reply:`, botReply);
 
         await ctx.reply(botReply);
     } catch (error) {
         lastError = error.message || error.toString();
-        console.error('OpenAI error:', lastError);
-        await ctx.reply('Извини, произошла ошибка при обработке твоего сообщения.');
+        console.error(`[${new Date().toISOString()}] OpenAI error:`, lastError);
+        try {
+            await ctx.reply('Извини, произошла ошибка при обработке твоего сообщения.');
+        } catch (replyError) {
+            console.error('Error sending error message to user:', replyError);
+        }
     }
 });
 
@@ -56,13 +60,13 @@ export default async function handler(req, res) {
         lastUpdate = req.body;
         lastError = null;
 
-        console.log('Incoming request:', JSON.stringify(req.body, null, 2));
+        console.log(`[${lastRequestTime}] Incoming request:`, JSON.stringify(req.body, null, 2));
         try {
             await bot.handleUpdate(req.body);
             return res.status(200).json({ ok: true, message: 'Update handled successfully' });
         } catch (error) {
             lastError = error.message || error.toString();
-            console.error('Error in bot handler:', lastError);
+            console.error(`[${new Date().toISOString()}] Error in bot handler:`, lastError);
             return res.status(500).json({ ok: false, error: lastError });
         }
     }
