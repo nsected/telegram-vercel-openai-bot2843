@@ -1,8 +1,9 @@
 import { Telegraf } from 'telegraf';
-import OpenAI from 'openai';
+import axios from 'axios';
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
 const MAX_LOGS = 30;
 const requestLogs = [];
@@ -28,22 +29,32 @@ bot.on('text', async (ctx) => {
     addRequestLog({ time: lastRequestTime, type: 'user_message', text: userMessage });
 
     try {
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-                { role: 'system', content: 'Ты дружелюбный и полезный ассистент.' },
-                { role: 'user', content: userMessage },
-            ],
-        });
+        const response = await axios.post(
+            DEEPSEEK_API_URL,
+            {
+                model: 'deepseek-chat',
+                messages: [
+                    { role: 'system', content: 'Ты дружелюбный и полезный ассистент.' },
+                    { role: 'user', content: userMessage },
+                ],
+                stream: false,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+                },
+            }
+        );
 
-        const botReply = response.choices[0].message.content.trim();
+        const botReply = response.data.choices[0].message.content.trim();
         addRequestLog({ time: new Date().toISOString(), type: 'bot_reply', text: botReply });
 
         await ctx.reply(botReply);
     } catch (error) {
-        const errMsg = error.message || error.toString();
+        const errMsg = error.response?.data?.error || error.message || error.toString();
         addErrorLog({ time: new Date().toISOString(), error: errMsg });
-        console.error('OpenAI error:', errMsg);
+        console.error('DeepSeek error:', errMsg);
 
         try {
             await ctx.reply('Извини, произошла ошибка при обработке твоего сообщения.');
@@ -64,16 +75,26 @@ export default async function handler(req, res) {
             addRequestLog({ time: lastRequestTime, type: 'rest_api_incoming_message', chat_id, text });
 
             try {
-                // Генерируем ответ от OpenAI
-                const response = await openai.chat.completions.create({
-                    model: 'gpt-4o-mini',
-                    messages: [
-                        { role: 'system', content: 'Ты дружелюбный и полезный ассистент.' },
-                        { role: 'user', content: text.toString() },
-                    ],
-                });
+                // Генерируем ответ от DeepSeek
+                const response = await axios.post(
+                    DEEPSEEK_API_URL,
+                    {
+                        model: 'deepseek-chat',
+                        messages: [
+                            { role: 'system', content: 'Ты дружелюбный и полезный ассистент.' },
+                            { role: 'user', content: text.toString() },
+                        ],
+                        stream: false,
+                    },
+                    {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+                        },
+                    }
+                );
 
-                const botReply = response.choices[0].message.content.trim();
+                const botReply = response.data.choices[0].message.content.trim();
                 addRequestLog({ time: new Date().toISOString(), type: 'rest_api_bot_reply', chat_id, reply: botReply });
 
                 // Отправляем ответ в чат Telegram по chat_id
@@ -86,9 +107,9 @@ export default async function handler(req, res) {
                     logsCount: requestLogs.length,
                 });
             } catch (error) {
-                const errMsg = error.message || error.toString();
+                const errMsg = error.response?.data?.error || error.message || error.toString();
                 addErrorLog({ time: new Date().toISOString(), error: errMsg });
-                console.error('OpenAI error:', errMsg);
+                console.error('DeepSeek error:', errMsg);
                 return res.status(500).json({ ok: false, error: errMsg });
             }
         }
