@@ -4,7 +4,10 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 bot.command('start', (ctx) => ctx.reply('Привет! Бот telegram-vercel-openai-bot2843 запущен.'));
 
-bot.on('text', (ctx) => ctx.reply('Привет! Я получил твоё сообщение.'));
+bot.on('text', (ctx) => {
+    console.log('Text message received:', ctx.message.text);
+    ctx.reply(`Ты написал: ${ctx.message.text}`);
+});
 
 console.log('Bot initialized');
 
