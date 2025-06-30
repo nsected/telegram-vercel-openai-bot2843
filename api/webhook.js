@@ -6,16 +6,30 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Кольцевые буферы для логов
+const MAX_LOGS = 10;
+const requestLogs = [];
+const errorLogs = [];
+
 let lastUpdate = null;
-let lastError = null;
 let lastRequestTime = null;
+
+function addRequestLog(entry) {
+    requestLogs.push(entry);
+    if (requestLogs.length > MAX_LOGS) requestLogs.shift();
+}
+
+function addErrorLog(entry) {
+    errorLogs.push(entry);
+    if (errorLogs.length > MAX_LOGS) errorLogs.shift();
+}
 
 bot.command('start', (ctx) => ctx.reply('Привет! Я бот на базе OpenAI. Напиши что-нибудь.'));
 
 bot.on('text', async (ctx) => {
     lastRequestTime = new Date().toISOString();
     const userMessage = ctx.message.text;
-    console.log(`[${lastRequestTime}] Received message:`, userMessage);
+    addRequestLog({ time: lastRequestTime, type: 'text', text: userMessage });
 
     try {
         const response = await openai.chat.completions.create({
@@ -27,17 +41,16 @@ bot.on('text', async (ctx) => {
         });
 
         const botReply = response.choices[0].message.content.trim();
-        console.log(`[${new Date().toISOString()}] OpenAI reply:`, botReply);
+        addRequestLog({ time: new Date().toISOString(), type: 'reply', text: botReply });
 
         await ctx.reply(botReply);
     } catch (error) {
-        lastError = error.message || error.toString();
-        console.error(`[${new Date().toISOString()}] OpenAI error:`, lastError);
+        const errMsg = error.message || error.toString();
+        addErrorLog({ time: new Date().toISOString(), error: errMsg });
+        console.error('OpenAI error:', errMsg);
         try {
             await ctx.reply('Извини, произошла ошибка при обработке твоего сообщения.');
-        } catch (replyError) {
-            console.error('Error sending error message to user:', replyError);
-        }
+        } catch {}
     }
 });
 
@@ -51,23 +64,24 @@ export default async function handler(req, res) {
             status: 'alive',
             lastRequestTime,
             lastUpdate,
-            lastError,
+            requestLogs,
+            errorLogs,
             message: 'Webhook is alive. Отправь POST запрос с update от Telegram.',
         });
     }
 
     if (req.method === 'POST') {
         lastUpdate = req.body;
-        lastError = null;
+        addRequestLog({ time: lastRequestTime, type: 'POST update', data: req.body });
 
-        console.log(`[${lastRequestTime}] Incoming request:`, JSON.stringify(req.body, null, 2));
         try {
             await bot.handleUpdate(req.body);
             return res.status(200).json({ ok: true, message: 'Update handled successfully' });
         } catch (error) {
-            lastError = error.message || error.toString();
-            console.error(`[${new Date().toISOString()}] Error in bot handler:`, lastError);
-            return res.status(500).json({ ok: false, error: lastError });
+            const errMsg = error.message || error.toString();
+            addErrorLog({ time: new Date().toISOString(), error: errMsg });
+            console.error('Error in bot handler:', errMsg);
+            return res.status(500).json({ ok: false, error: errMsg });
         }
     }
 
