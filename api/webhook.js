@@ -137,7 +137,7 @@ export default async function handler(req, res) {
 
         try {
             await bot.handleUpdate(req.body);
-            return res.status(200).json({ ok: true, message: 'Update handled successfully' });
+            return res.status(200).json({ ok: true, message: '1Update handled successfully' });
         } catch (error) {
             const errMsg = error.message || error.toString();
             addErrorLog({ time: new Date().toISOString(), error: errMsg });
@@ -145,6 +145,7 @@ export default async function handler(req, res) {
             return res.status(500).json({ ok: false, error: errMsg });
         }
     }
+
 
     return res.status(405).json({ error: 'Method Not Allowed' });
 }
