@@ -2,11 +2,9 @@ import { Telegraf } from 'telegraf';
 import OpenAI from 'openai';
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const MAX_LOGS = 10;
+const MAX_LOGS = 20;
 const requestLogs = [];
 const errorLogs = [];
 
@@ -28,7 +26,7 @@ bot.command('start', (ctx) => ctx.reply('Привет! Я бот на базе O
 bot.on('text', async (ctx) => {
     lastRequestTime = new Date().toISOString();
     const userMessage = ctx.message.text;
-    addRequestLog({ time: lastRequestTime, type: 'text', text: userMessage });
+    addRequestLog({ time: lastRequestTime, type: 'user_message', text: userMessage });
 
     try {
         const response = await openai.chat.completions.create({
@@ -40,7 +38,7 @@ bot.on('text', async (ctx) => {
         });
 
         const botReply = response.choices[0].message.content.trim();
-        addRequestLog({ time: new Date().toISOString(), type: 'reply', text: botReply });
+        addRequestLog({ time: new Date().toISOString(), type: 'bot_reply', text: botReply });
 
         await ctx.reply(botReply);
     } catch (error) {
@@ -48,15 +46,9 @@ bot.on('text', async (ctx) => {
         addErrorLog({ time: new Date().toISOString(), error: errMsg });
         console.error('OpenAI error:', errMsg);
 
-        // Отправляем подробности ошибки в чат
-        const errorText = `Ошибка при обработке запроса:\n${errMsg}\n\nПоследние ошибки:\n` +
-            errorLogs.map(e => `[${e.time}] ${e.error}`).join('\n');
-
         try {
-            await ctx.reply(errorText);
-        } catch {
-            // Если ошибка при отправке ответа, молча пропускаем
-        }
+            await ctx.reply('Извини, произошла ошибка при обработке твоего сообщения.');
+        } catch {}
     }
 });
 
@@ -66,6 +58,7 @@ export default async function handler(req, res) {
     lastRequestTime = new Date().toISOString();
 
     if (req.method === 'GET') {
+        // Возвращаем всю отладочную информацию в JSON
         return res.status(200).json({
             status: 'alive',
             lastRequestTime,
@@ -78,7 +71,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
         lastUpdate = req.body;
-        addRequestLog({ time: lastRequestTime, type: 'POST update', data: req.body });
+        addRequestLog({ time: lastRequestTime, type: 'POST_update', data: req.body });
 
         try {
             await bot.handleUpdate(req.body);
@@ -87,17 +80,6 @@ export default async function handler(req, res) {
             const errMsg = error.message || error.toString();
             addErrorLog({ time: new Date().toISOString(), error: errMsg });
             console.error('Error in bot handler:', errMsg);
-
-            // Попробуем отправить сообщение об ошибке в чат, если возможно
-            if (lastUpdate && lastUpdate.message && lastUpdate.message.chat && lastUpdate.message.chat.id) {
-                const chatId = lastUpdate.message.chat.id;
-                try {
-                    await bot.telegram.sendMessage(chatId, `Ошибка при обработке обновления:\n${errMsg}`);
-                } catch {
-                    // Игнорируем ошибку отправки
-                }
-            }
-
             return res.status(500).json({ ok: false, error: errMsg });
         }
     }
