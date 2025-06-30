@@ -6,7 +6,6 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Кольцевые буферы для логов
 const MAX_LOGS = 10;
 const requestLogs = [];
 const errorLogs = [];
@@ -48,9 +47,16 @@ bot.on('text', async (ctx) => {
         const errMsg = error.message || error.toString();
         addErrorLog({ time: new Date().toISOString(), error: errMsg });
         console.error('OpenAI error:', errMsg);
+
+        // Отправляем подробности ошибки в чат
+        const errorText = `Ошибка при обработке запроса:\n${errMsg}\n\nПоследние ошибки:\n` +
+            errorLogs.map(e => `[${e.time}] ${e.error}`).join('\n');
+
         try {
-            await ctx.reply('Извини, произошла ошибка при обработке твоего сообщения.');
-        } catch {}
+            await ctx.reply(errorText);
+        } catch {
+            // Если ошибка при отправке ответа, молча пропускаем
+        }
     }
 });
 
@@ -81,6 +87,17 @@ export default async function handler(req, res) {
             const errMsg = error.message || error.toString();
             addErrorLog({ time: new Date().toISOString(), error: errMsg });
             console.error('Error in bot handler:', errMsg);
+
+            // Попробуем отправить сообщение об ошибке в чат, если возможно
+            if (lastUpdate && lastUpdate.message && lastUpdate.message.chat && lastUpdate.message.chat.id) {
+                const chatId = lastUpdate.message.chat.id;
+                try {
+                    await bot.telegram.sendMessage(chatId, `Ошибка при обработке обновления:\n${errMsg}`);
+                } catch {
+                    // Игнорируем ошибку отправки
+                }
+            }
+
             return res.status(500).json({ ok: false, error: errMsg });
         }
     }
