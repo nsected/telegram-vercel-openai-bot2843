@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const MAX_LOGS = 20;
+const MAX_LOGS = 30;
 const requestLogs = [];
 const errorLogs = [];
 
@@ -21,8 +21,7 @@ function addErrorLog(entry) {
     if (errorLogs.length > MAX_LOGS) errorLogs.shift();
 }
 
-bot.command('start', (ctx) => ctx.reply('Привет! Я бот на базе OpenAI. Напиши что-нибудь.'));
-
+// Telegram message handler — отвечает в чате
 bot.on('text', async (ctx) => {
     lastRequestTime = new Date().toISOString();
     const userMessage = ctx.message.text;
@@ -58,14 +57,56 @@ export default async function handler(req, res) {
     lastRequestTime = new Date().toISOString();
 
     if (req.method === 'GET') {
-        // Возвращаем всю отладочную информацию в JSON
+        const { chat_id, text } = req.query || {};
+
+        if (chat_id && text) {
+            // Пришло "сообщение" через параметры — имитируем обработку
+            addRequestLog({ time: lastRequestTime, type: 'rest_api_incoming_message', chat_id, text });
+
+            try {
+                // Генерируем ответ от OpenAI
+                const response = await openai.chat.completions.create({
+                    model: 'gpt-4o-mini',
+                    messages: [
+                        { role: 'system', content: 'Ты дружелюбный и полезный ассистент.' },
+                        { role: 'user', content: text.toString() },
+                    ],
+                });
+
+                const botReply = response.choices[0].message.content.trim();
+                addRequestLog({ time: new Date().toISOString(), type: 'rest_api_bot_reply', chat_id, reply: botReply });
+
+                // Отправляем ответ в чат Telegram по chat_id
+                await bot.telegram.sendMessage(chat_id.toString(), botReply);
+
+                return res.status(200).json({
+                    ok: true,
+                    sentToChatId: chat_id,
+                    reply: botReply,
+                    logsCount: requestLogs.length,
+                });
+            } catch (error) {
+                const errMsg = error.message || error.toString();
+                addErrorLog({ time: new Date().toISOString(), error: errMsg });
+                console.error('OpenAI error:', errMsg);
+                return res.status(500).json({ ok: false, error: errMsg });
+            }
+        }
+
+        // Без параметров — просто выводим логи и статус
+        let chatId = null;
+        if (lastUpdate && lastUpdate.message && lastUpdate.message.chat && lastUpdate.message.chat.id) {
+            chatId = lastUpdate.message.chat.id;
+        }
+
         return res.status(200).json({
             status: 'alive',
             lastRequestTime,
             lastUpdate,
+            chatId,
             requestLogs,
             errorLogs,
-            message: 'Webhook is alive. Отправь POST запрос с update от Telegram.',
+            message: 'Webhook alive. Для отправки сообщения GET /api/webhook?chat_id=123&text=текст',
         });
     }
 
