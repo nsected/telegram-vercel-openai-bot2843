@@ -12,5 +12,3 @@
     "telegraf": "^4.12.2"
   }
 }
-curl.exe -F "https://telegram-vercel-openai-bot2843.vercel.app/api/webhook" https://api.telegram.org/botsk-proj-GmgS8pOqjvvPbuSL4uCI2z6DlndhNKj44oNagSdHa7DHQgvKQV-lvi08kMf0r_J1X5yJwc4FgKT3BlbkFJDsPXCH7RL6PfA-RhgCPzRxQtt7bPUGYCVTUYFuUU4xaQaVoXe8spFa9WRYclbQFJzDGthc3Y8A/setWebhook
-
