@@ -1,7 +1,7 @@
 const { Telegraf } = require('telegraf');
 const { askChatGPT } = require('./openai');
 require('dotenv').config();
-
+console.log('Bot started')
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 bot.on('text', async (ctx) => {
