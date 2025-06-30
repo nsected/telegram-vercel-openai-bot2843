@@ -1,9 +1,11 @@
-import { Telegraf } from 'telegraf';
-import axios from 'axios';
+const axios = require('axios');
+const { Telegraf } = require('telegraf');
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+
+const bot = new Telegraf(BOT_TOKEN);
 
 const MAX_LOGS = 30;
 const requestLogs = [];
@@ -22,7 +24,7 @@ function addErrorLog(entry) {
     if (errorLogs.length > MAX_LOGS) errorLogs.shift();
 }
 
-// Telegram message handler — отвечает в чате
+// Telegram message handler
 bot.on('text', async (ctx) => {
     lastRequestTime = new Date().toISOString();
     const userMessage = ctx.message.text;
@@ -64,18 +66,16 @@ bot.on('text', async (ctx) => {
 
 console.log('Bot initialized');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     lastRequestTime = new Date().toISOString();
 
     if (req.method === 'GET') {
         const { chat_id, text } = req.query || {};
 
         if (chat_id && text) {
-            // Пришло "сообщение" через параметры — имитируем обработку
             addRequestLog({ time: lastRequestTime, type: 'rest_api_incoming_message', chat_id, text });
 
             try {
-                // Генерируем ответ от DeepSeek
                 const response = await axios.post(
                     DEEPSEEK_API_URL,
                     {
@@ -97,7 +97,6 @@ export default async function handler(req, res) {
                 const botReply = response.data.choices[0].message.content.trim();
                 addRequestLog({ time: new Date().toISOString(), type: 'rest_api_bot_reply', chat_id, reply: botReply });
 
-                // Отправляем ответ в чат Telegram по chat_id
                 await bot.telegram.sendMessage(chat_id.toString(), botReply);
 
                 return res.status(200).json({
@@ -114,7 +113,7 @@ export default async function handler(req, res) {
             }
         }
 
-        // Без параметров — просто выводим логи и статус
+        // Без параметров GET — выдаём статус и логи
         let chatId = null;
         if (lastUpdate && lastUpdate.message && lastUpdate.message.chat && lastUpdate.message.chat.id) {
             chatId = lastUpdate.message.chat.id;
@@ -137,7 +136,7 @@ export default async function handler(req, res) {
 
         try {
             await bot.handleUpdate(req.body);
-            return res.status(200).json({ ok: true, message: '1Update handled successfully' });
+            return res.status(200).json({ ok: true, message: 'Update handled successfully' });
         } catch (error) {
             const errMsg = error.message || error.toString();
             addErrorLog({ time: new Date().toISOString(), error: errMsg });
@@ -146,6 +145,5 @@ export default async function handler(req, res) {
         }
     }
 
-
     return res.status(405).json({ error: 'Method Not Allowed' });
-}
+};
